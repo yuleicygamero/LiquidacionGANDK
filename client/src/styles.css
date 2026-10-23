@@ -333,3 +333,91 @@ html { scroll-behavior: smooth; scroll-padding-top: 100px; }
   .panel-total-principal span, .panel-total-principal small, .panel-total-datos dt { color: var(--suave); }
   .bloque { break-inside: avoid; border: 0; padding: 0.5rem 0; }
 }
+
+/* ---------- Sesión ---------- */
+.cargando-sesion {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--suave);
+  font-weight: 600;
+}
+
+.sesion { display: flex; align-items: center; gap: 0.6rem; padding-bottom: 0.55rem; }
+.sesion-nombre {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sesion-salir {
+  background: transparent;
+  color: var(--denim-claro);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radio);
+  padding: 0.25rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.sesion-salir:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+.login-fondo {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: linear-gradient(160deg, var(--denim-oscuro), var(--denim));
+}
+.login-caja {
+  width: 100%;
+  max-width: 340px;
+  background: var(--superficie);
+  border-radius: 10px;
+  padding: 2rem 1.75rem 1.5rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.login-logo { width: 64px; align-self: center; margin-bottom: 0.25rem; }
+.login-caja h1 { font-size: 1.2rem; text-align: center; }
+.login-sub {
+  margin: 0 0 0.5rem;
+  text-align: center;
+  color: var(--suave);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.login-caja label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--suave);
+}
+.login-caja input {
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 0.55rem 0.65rem;
+  background: var(--superficie);
+}
+.login-boton {
+  margin-top: 0.5rem;
+  background: var(--denim);
+  color: #fff;
+  border: 0;
+  border-radius: var(--radio);
+  padding: 0.65rem;
+  font-weight: 700;
+}
+.login-boton:hover:not(:disabled) { background: var(--denim-oscuro); }
+.login-nota {
+  margin: 0.35rem 0 0;
+  text-align: center;
+  color: var(--suave);
+  font-size: 0.76rem;
+}

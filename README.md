@@ -54,3 +54,69 @@ client/  React + Vite
 
 ## Si `npm run instalar` falla en better-sqlite3 (Windows)
 Usa Node LTS (20 o 22). Si persiste, instala "Desktop development with C++" de Visual Studio Build Tools y repite.
+
+## Despliegue en el servidor
+
+En producción la app vive en **https://gandkcontrol.com/liquidacion/**, junto a la
+plataforma de Seguimiento de Pedidos, y **comparte su login**: no tiene usuarios
+propios. Solo entran las cuentas con rol `Liquidacion`, que no da acceso a ninguna
+otra parte de GANDK Control.
+
+La sesión se comprueba contra la API de Seguimiento (`GET /api/auth/me`,
+reenviando la cookie `token`), con una caché de 60 s. Así el `JWT_SECRET` no se
+duplica aquí, y desactivar a alguien allí le cierra esta app casi al instante.
+
+### Diferencias con el arranque local
+- Sin `AUTH_BASE` **no hay autenticación**: es el modo de desarrollo descrito arriba.
+- Con `AUTH_BASE` definida, el proceso escucha solo en `127.0.0.1` (detrás de
+  nginx), desactiva CORS y sirve él mismo `client/dist`, porque no hay Vite.
+
+### Pasos
+```bash
+cd /var/www/liquidacion
+git pull
+npm run instalar
+BASE_PATH=/liquidacion/ npm run build --prefix client   # el prefijo va en el build
+pm2 restart liquidacion        # la primera vez: pm2 start ecosystem.config.cjs
+```
+
+`BASE_PATH` es imprescindible: sin él, el cliente pediría `/api/...` en la raíz
+del dominio, donde responde la **otra** aplicación.
+
+El proceso se arranca con `ecosystem.config.cjs`, que fija `cwd` en `server/`.
+Importa: dotenv lee el `.env` del directorio de trabajo, así que arrancarlo
+desde la raíz del repo dejaría la app **sin `AUTH_BASE`** — es decir, sin
+autenticación y escuchando en todas las interfaces.
+
+Configuración en `server/.env` (ver `server/.env.example`):
+
+```
+PORT=3008
+AUTH_BASE=http://127.0.0.1:3007
+ROL=Liquidacion
+```
+
+Y en nginx, dentro del `server` de `gandkcontrol.com`:
+
+```nginx
+location /liquidacion/ {
+    proxy_pass http://127.0.0.1:3008/;   # la barra final quita /liquidacion/
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+### Dar acceso a un usuario
+El rol `Liquidacion` no aparece en el panel `/users` de Seguimiento (su lista de
+roles está fija en el frontend), así que se asigna en su base de datos:
+
+```bash
+sudo -u www-data sqlite3 /var/www/seguimiento-server/prisma/dev.db \
+  "UPDATE User SET role='Liquidacion' WHERE username='NOMBRE';"
+```
+
+Haz copia del `.db` antes de tocarlo. El cambio tarda hasta 60 s en notarse (la
+caché de sesión), o cierra sesión y vuelve a entrar.

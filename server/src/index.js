@@ -1,12 +1,35 @@
+// Primero que nada: auth.js lee process.env al cargarse, y en ESM los imports
+// se evalúan en orden, así que el .env tiene que estar leído antes que él.
+// Si no existe el archivo, dotenv no se queja: es justo el caso de local.
+import 'dotenv/config';
+
 import express from 'express';
 import cors from 'cors';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import db from './db.js';
+import { authActiva, requiereSesion, rutasSesion } from './auth.js';
 
 const app = express();
-app.use(cors());
+
+// En desarrollo el cliente corre en otro puerto (Vite, 5173) y necesita CORS.
+// En el servidor va detrás del mismo nginx, mismo origen: abrirlo no aporta
+// nada y amplía la superficie, así que solo se activa en local.
+if (!authActiva) app.use(cors());
+
 app.use(express.json());
 
+// Entrar y salir es lo único alcanzable sin sesión; el resto de /api va detrás
+// del middleware. Tiene que declararse ANTES que las rutas de datos: Express
+// recorre la pila en orden de registro.
+rutasSesion(app);
+app.use('/api', requiereSesion);
+
 const PORT = process.env.PORT || 3001;
+// Detrás de nginx solo debe escuchar en loopback: publicarlo en 0.0.0.0 dejaría
+// la API accesible por IP:puerto, saltándose el proxy y la cookie de sesión.
+const HOST = process.env.HOST || (authActiva ? '127.0.0.1' : '0.0.0.0');
 const redondear = (n) => Math.round(n);
 const minutosEntre = (ini, fin) => {
   const [h1, m1] = ini.split(':').map(Number);
@@ -269,4 +292,19 @@ app.delete('/api/jc/registros/:id', (req, res) => {
   res.json({ eliminada: r.changes > 0 });
 });
 
-app.listen(PORT, () => console.log(`API de liquidación en http://localhost:${PORT}`));
+/* ---------- Frontend compilado (solo en el servidor) ---------- */
+// En local no hace falta: Vite sirve el cliente en el 5173 y reenvía /api aquí.
+// En el servidor no hay Vite, así que este mismo proceso entrega `client/dist`.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DIST = join(__dirname, '..', '..', 'client', 'dist');
+
+if (existsSync(DIST)) {
+  app.use(express.static(DIST));
+  // Fallback de SPA: cualquier ruta que no sea /api y no exista como archivo
+  // devuelve index.html para que el enrutado lo resuelva el cliente.
+  app.get(/^(?!\/api\/).*/, (req, res) => res.sendFile(join(DIST, 'index.html')));
+} else if (authActiva) {
+  console.warn(`[AVISO] No existe ${DIST}. Ejecuta "npm run build --prefix client" antes de desplegar.`);
+}
+
+app.listen(PORT, HOST, () => console.log(`API de liquidación en http://${HOST}:${PORT}`));

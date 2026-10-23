@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from './api.js';
+import { api, ErrorSesion, recurso, sesion } from './api.js';
+import Login from './Login.jsx';
 import Registro from './pages/Registro.jsx';
 import Liquidacion from './pages/Liquidacion.jsx';
 import Trabajadores from './pages/Trabajadores.jsx';
@@ -50,6 +51,32 @@ export default function App() {
   const [catalogos, setCatalogos] = useState({ trabajadores: [], prendas: [], adicionales: [], jcOperaciones: [], parametros: {} });
   const [error, setError] = useState('');
 
+  // Sesión: `null` mientras se comprueba, para no enseñar el login a quien ya
+  // ha entrado (parpadeo) ni la aplicación a quien no.
+  const [usuario, setUsuario] = useState(null);
+  const [sesionLista, setSesionLista] = useState(false);
+  const [avisoSesion, setAvisoSesion] = useState('');
+
+  const cerrarSesion = useCallback((aviso = '') => {
+    setUsuario(null);
+    setAvisoSesion(aviso);
+    setCatalogos({ trabajadores: [], prendas: [], adicionales: [], jcOperaciones: [], parametros: {} });
+  }, []);
+
+  useEffect(() => {
+    let vigente = true;
+    sesion
+      .quienSoy()
+      .then(({ usuario }) => { if (vigente) setUsuario(usuario); })
+      .catch((err) => {
+        // Un 403 es "entraste, pero este no es tu sitio": merece explicación,
+        // porque reintentar con la misma cuenta no va a servir de nada.
+        if (vigente && err instanceof ErrorSesion && err.codigo === 403) setAvisoSesion(err.message);
+      })
+      .finally(() => { if (vigente) setSesionLista(true); });
+    return () => { vigente = false; };
+  }, []);
+
   const recargar = useCallback(async () => {
     try {
       const [trabajadores, prendas, adicionales, jcOperaciones, parametros] = await Promise.all([
@@ -61,12 +88,20 @@ export default function App() {
       ]);
       setCatalogos({ trabajadores, prendas, adicionales, jcOperaciones, parametros });
       setError('');
-    } catch {
-      setError('No hay conexión con el servidor. Revisa que la API esté corriendo en el puerto 3001 (npm run dev).');
+    } catch (err) {
+      // Si la sesión caducó mientras la pestaña estaba abierta, devolver al
+      // login es más útil que un aviso de "sin conexión" que no lo es.
+      if (err instanceof ErrorSesion) cerrarSesion(err.message);
+      else setError('No hay conexión con el servidor. Vuelve a intentarlo en unos segundos.');
     }
-  }, []);
+  }, [cerrarSesion]);
 
-  useEffect(() => { recargar(); }, [recargar]);
+  useEffect(() => { if (usuario) recargar(); }, [usuario, recargar]);
+
+  const salir = async () => {
+    try { await sesion.salir(); } catch { /* la sesión se cierra igual en el cliente */ }
+    cerrarSesion();
+  };
 
   useEffect(() => {
     if (!menuAbierto) return;
@@ -84,6 +119,13 @@ export default function App() {
 
   const mod = MODULOS[modulo];
 
+  // Las puertas van después de declarar todos los hooks: salir antes alteraría
+  // el orden entre renders y React lo rechaza.
+  if (!sesionLista) return <div className="cargando-sesion">Comprobando sesión…</div>;
+  if (!usuario) {
+    return <Login alEntrar={(u) => { setUsuario(u); setAvisoSesion(''); }} avisoInicial={avisoSesion} />;
+  }
+
   return (
     <div className="app">
       <header className="barra">
@@ -91,7 +133,7 @@ export default function App() {
           <button type="button" className="hamburguesa" aria-label="Abrir menú" aria-expanded={menuAbierto} aria-controls="menu-lateral" onClick={() => setMenuAbierto(true)}>
             <span /><span /><span />
           </button>
-          <span className="marca-logo"><img src="/logo.png" alt="GANDK Dotaciones" /></span>
+          <span className="marca-logo"><img src={recurso('logo.png')} alt="GANDK Dotaciones" /></span>
           <div>
             <strong>{mod.nombre}</strong>
             <span>Liquidación de producción · GANDK Dotaciones</span>
@@ -109,6 +151,10 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <div className="sesion">
+          <span className="sesion-nombre" title={usuario.username}>{usuario.nombre}</span>
+          <button type="button" className="sesion-salir" onClick={salir}>Salir</button>
+        </div>
       </header>
 
       {menuAbierto && <div className="menu-fondo" onClick={() => setMenuAbierto(false)} aria-hidden="true" />}
